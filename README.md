@@ -56,10 +56,10 @@ YOUTUBE_DOWNLOADER/
 │   ├── youtube_downloader.py   # núcleo + CLI (lógica de download e opções do yt-dlp)
 │   └── gui.py                  # interface gráfica (Tkinter), reusa o núcleo
 ├── scripts/
-│   └── gerar_icone.py          # gera assets/icon.ico a partir do logo do app
+│   └── generate_icon.py        # gera assets/icon.ico a partir do logo do app
 ├── assets/
 │   └── icon.ico                # ícone usado no build do .exe
-├── Abrir GUI.bat               # atalho Windows para abrir a GUI pela venv
+├── Run GUI.bat                 # atalho Windows para abrir a GUI pela venv
 ├── YouTube Downloader.spec     # receita do PyInstaller
 ├── requirements.txt
 ├── LICENSE
@@ -92,7 +92,7 @@ pip install -r requirements.txt
 .venv\Scripts\python.exe src\gui.py
 ```
 
-Ou dê **duplo-clique em `Abrir GUI.bat`** (Windows).
+Ou dê **duplo-clique em `Run GUI.bat`** (Windows).
 
 Na janela você cola as URLs (uma por linha), escolhe a pasta de destino, os
 idiomas de legenda e a qualidade, e acompanha o progresso e o log em tempo real.
@@ -136,7 +136,7 @@ embutidos e extraídos para uma pasta temporária em tempo de execução.
 
 1. Coloque `ffmpeg.exe`, `ffprobe.exe` e `deno.exe` numa pasta `build_bin/`
    (não versionada — veja o `.gitignore`).
-2. Gere o ícone (opcional): `python scripts/gerar_icone.py`
+2. Gere o ícone (opcional): `python scripts/generate_icon.py`
 3. Faça o build:
 
 ```powershell
