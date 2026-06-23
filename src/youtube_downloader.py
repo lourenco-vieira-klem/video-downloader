@@ -15,7 +15,6 @@ except ImportError:
 
 
 def default_downloads_dir() -> Path:
-    # User's conventional Downloads folder on Windows, Linux and macOS.
     return Path.home() / "Downloads"
 
 
@@ -32,10 +31,6 @@ def check_ffmpeg() -> None:
 
 
 def ensure_js_runtime() -> bool:
-    # YouTube requires a JS runtime (Deno) to extract formats; without it yt-dlp
-    # fails with "This video is not available". Look it up in PATH and, if
-    # missing, in the default winget install dirs, adding it to this session's
-    # PATH so no terminal restart is needed. Returns True if a runtime is found.
     if shutil.which("deno") or shutil.which("node") or shutil.which("bun"):
         return True
 
@@ -43,7 +38,6 @@ def ensure_js_runtime() -> bool:
         Path(os.environ.get("LOCALAPPDATA", "")) / "Microsoft" / "WinGet" / "Links",
         Path(os.environ.get("USERPROFILE", "")) / ".deno" / "bin",
     ]
-    # Winget package dir (hashed path).
     pkgs = Path(os.environ.get("LOCALAPPDATA", "")) / "Microsoft" / "WinGet" / "Packages"
     if pkgs.is_dir():
         candidates += list(pkgs.glob("DenoLand.Deno_*"))
@@ -62,12 +56,6 @@ def build_options(dest: Path, langs: str, auto_subs: bool,
     sub_langs = ["all"] if langs.strip().lower() == "all" else \
         [s.strip() for s in langs.split(",") if s.strip()]
 
-    # Audio selector: pick ONE track per language (the best), not every
-    # codec/bitrate variant. Multi-dub videos expose each language in ~4 formats
-    # (opus at 3 bitrates + aac); plain 'mergeall' would grab them all (dozens
-    # of redundant tracks) and make the final merge heavy/fail. Each item is an
-    # attempt ('/' = fallback): 1) best opus per language (abr>100), no DRC
-    # copies; 2) any non-DRC audio; 3) finally the single best audio.
     audio_selectors = [
         "mergeall[vcodec=none][acodec^=opus][abr>100][format_id!*=drc]",
         "mergeall[vcodec=none][format_id!*=drc]",
@@ -77,48 +65,38 @@ def build_options(dest: Path, langs: str, auto_subs: bool,
     if audio_only:
         fmt = "/".join(audio_selectors)
     else:
-        # Pair the chosen video with each audio attempt, cascading.
         fmt = "/".join(f"{quality}+{a}" for a in audio_selectors) + "/best"
 
     options = {
-        # ---- YouTube extraction ----
-        # Fetch the required "challenge solver" (EJS) along with the JS runtime
-        # (Deno) to solve signatures and not lose formats.
         "remote_components": ["ejs:github"],
 
-        # ---- Format selection ----
         "format": fmt,
-        "allow_multiple_audio_streams": True,   # allow >1 audio track
+        "allow_multiple_audio_streams": True,
         "allow_multiple_video_streams": False,
-        "merge_output_format": "mkv",           # MKV holds N audios + N subtitles
+        "merge_output_format": "mkv",
 
-        # ---- Subtitles ----
-        "writesubtitles": True,                 # download "official" subtitles
-        "writeautomaticsub": auto_subs,         # auto-generated subtitles
+        "writesubtitles": True,
+        "writeautomaticsub": auto_subs,
         "subtitleslangs": sub_langs,
 
-        # ---- Output / organization ----
         "outtmpl": {
             "default": str(dest / "%(playlist_title,Vídeos)s/%(title)s [%(id)s].%(ext)s"),
         },
-        "ignoreerrors": True,                    # one bad video won't stop the playlist
-        "continuedl": True,                      # resume interrupted downloads
+        "ignoreerrors": True,
+        "continuedl": True,
         "writethumbnail": True,
 
-        # ---- Post-processing (final mux) ----
         "postprocessors": [
             {"key": "FFmpegEmbedSubtitle", "already_have_subtitle": False},
             {"key": "FFmpegMetadata", "add_metadata": True, "add_chapters": True},
             {"key": "EmbedThumbnail", "already_have_thumbnail": False},
         ],
 
-        # ---- Logs ----
         "quiet": False,
         "no_warnings": False,
     }
 
     if audio_only:
-        # Audio-only: MKA is the right container for multiple tracks.
         options["merge_output_format"] = "mka"
         options["postprocessors"] = [
             {"key": "FFmpegMetadata", "add_metadata": True, "add_chapters": True},

@@ -11,9 +11,6 @@ from tkinter import filedialog, messagebox
 
 
 def _register_embedded_binaries():
-    # When running as a frozen .exe (PyInstaller), the embedded binaries
-    # (ffmpeg, ffprobe, deno) are extracted to a temp folder. Add it to PATH so
-    # shutil.which and yt-dlp find them, making the executable self-contained.
     if getattr(sys, "frozen", False):
         base = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
         os.environ["PATH"] = base + os.pathsep + os.environ.get("PATH", "")
@@ -42,8 +39,6 @@ from youtube_downloader import (
 )
 
 
-# --------------------------------------------------------------------- palette
-# Hex approximations of the redesign's OKLCH colors (dark purple/pink theme).
 C = {
     "bg_page":      "#141318",
     "bg_window":    "#1d1c24",
@@ -63,7 +58,6 @@ C = {
     "accent2":      "#ec4899",
 }
 
-# Maps a friendly quality label to the yt-dlp selector.
 QUALITIES = {
     "Melhor disponível (bv*)": "bv*",
     "2160p (4K)":              "bv*[height<=2160]",
@@ -73,7 +67,6 @@ QUALITIES = {
 }
 
 
-# ----------------------------------------------------------------- utilities
 def _hex_to_rgb(h: str):
     h = h.lstrip("#")
     return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
@@ -89,15 +82,13 @@ def _lerp(c1: str, c2: str, t: float) -> str:
 
 
 def _brighten(h: str, f: float) -> str:
-    # f>0 lightens, f<0 darkens.
     return _lerp(h, "#ffffff" if f >= 0 else "#000000", abs(f))
 
 
-_SS = 4  # supersampling factor for corner anti-aliasing
+_SS = 4
 
 
 def _gradient_image(w: int, h: int, c1: str, c2: str) -> "Image.Image":
-    # Horizontal c1->c2 gradient as an RGB image.
     a, b = _hex_to_rgb(c1), _hex_to_rgb(c2)
     if c1 == c2:
         return Image.new("RGB", (w, h), a)
@@ -110,7 +101,6 @@ def _gradient_image(w: int, h: int, c1: str, c2: str) -> "Image.Image":
 
 
 def _round_rect_photo(w, h, r, c1, c2, border=None):
-    # Rounded rectangle with gradient and anti-aliased edges.
     ss = _SS
     W, H, R = w * ss, h * ss, int(r * ss)
     grad = _gradient_image(W, H, c1, c2).convert("RGBA")
@@ -124,10 +114,7 @@ def _round_rect_photo(w, h, r, c1, c2, border=None):
     return ImageTk.PhotoImage(grad.resize((w, h), Image.LANCZOS))
 
 
-# ----------------------------------------------------------------- components
 class RoundedButton(tk.Canvas):
-    # Rounded button with anti-aliased corners (rendered via Pillow).
-
     def __init__(self, master, text, command, *, colors=None, fill=None,
                  fg="white", font=None, icon=None, height=40, pad_x=20,
                  min_width=0, border=None):
@@ -213,8 +200,6 @@ class RoundedButton(tk.Canvas):
 
 
 class ToggleSwitch(tk.Canvas):
-    # iOS-style switch with anti-aliased corners and knob (Pillow).
-
     W, H = 44, 24
 
     def __init__(self, master, command=None, value=False):
@@ -267,8 +252,6 @@ class ToggleSwitch(tk.Canvas):
 
 
 class GradientBar(tk.Canvas):
-    # Rounded, anti-aliased gradient progress bar.
-
     def __init__(self, master, height=10):
         super().__init__(master, height=height, bg=master["bg"],
                          highlightthickness=0, bd=0)
@@ -306,8 +289,6 @@ class GradientBar(tk.Canvas):
 
 
 class AppMark(tk.Canvas):
-    # Logo: rounded square with gradient and a download arrow (Pillow).
-
     def __init__(self, master, size=46):
         super().__init__(master, width=size, height=size, bg=master["bg"],
                          highlightthickness=0, bd=0)
@@ -331,10 +312,7 @@ class AppMark(tk.Canvas):
         self.create_image(0, 0, anchor="nw", image=self._photo)
 
 
-# ------------------------------------------------------------------ logging
 class GuiLogger:
-    # yt-dlp logger that forwards messages to the GUI queue.
-
     def __init__(self, msg_queue: queue.Queue):
         self.msg_queue = msg_queue
 
@@ -353,7 +331,6 @@ class GuiLogger:
         self.msg_queue.put(("log", "✕ ERROR " + msg))
 
 
-# --------------------------------------------------------------------- App
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -376,7 +353,6 @@ class App(tk.Tk):
         self.after(100, self._process_queue)
         self._pulse()
 
-    # ----------------------------------------------------------------- fonts
     def _init_fonts(self):
         self.f_ui = tkfont.Font(family="Segoe UI", size=10)
         self.f_ui_b = tkfont.Font(family="Segoe UI", size=10, weight="bold")
@@ -386,7 +362,6 @@ class App(tk.Tk):
         self.f_mono = tkfont.Font(family="Consolas", size=10)
         self.f_pct = tkfont.Font(family="Segoe UI", size=14, weight="bold")
 
-    # -------------------------------------------------------------- builders
     def _card(self, parent):
         return tk.Frame(parent, bg=C["surface"], highlightthickness=1,
                         highlightbackground=C["border_soft"], bd=0)
@@ -402,12 +377,10 @@ class App(tk.Tk):
         return tk.Label(parent, text=text, bg=parent["bg"],
                         fg=fg or C["text"], font=font or self.f_ui)
 
-    # ----------------------------------------------------------------- layout
     def _build_widgets(self):
         root = tk.Frame(self, bg=C["bg_page"])
         root.pack(fill="both", expand=True, padx=26, pady=24)
 
-        # ---- Header --------------------------------------------------------
         head = tk.Frame(root, bg=C["bg_page"])
         head.pack(fill="x", pady=(0, 18))
         AppMark(head).pack(side="left")
@@ -417,7 +390,6 @@ class App(tk.Tk):
         self._lbl(htxt, "Baixe vídeos, áudio e legendas em lote",
                   self.f_small, C["text_mut"]).pack(anchor="w")
 
-        # ---- Card: Links ---------------------------------------------------
         c_links = self._card(root)
         c_links.pack(fill="x", pady=(0, 16))
         inner = tk.Frame(c_links, bg=C["surface"])
@@ -445,13 +417,11 @@ class App(tk.Tk):
                   "automaticamente", self.f_small, C["text_dim"]).pack(
                       anchor="w", pady=(9, 0))
 
-        # ---- Card: Options -------------------------------------------------
         c_opt = self._card(root)
         c_opt.pack(fill="x", pady=(0, 16))
         opt = tk.Frame(c_opt, bg=C["surface"])
         opt.pack(fill="x", padx=20, pady=18)
 
-        # Destination folder
         self._lbl(opt, "Pasta de destino", self.f_small_b).pack(anchor="w",
                                                                 pady=(0, 7))
         dest = tk.Frame(opt, bg=C["surface"])
@@ -464,13 +434,11 @@ class App(tk.Tk):
                       height=34, pad_x=14, border=C["border"]).pack(
                           side="left", padx=(8, 0))
 
-        # 2-column grid
         grid = tk.Frame(opt, bg=C["surface"])
         grid.pack(fill="x")
         grid.columnconfigure(0, weight=1, uniform="g")
         grid.columnconfigure(1, weight=1, uniform="g")
 
-        # Quality
         f_q = tk.Frame(grid, bg=C["surface"])
         f_q.grid(row=0, column=0, sticky="ew", padx=(0, 7), pady=(0, 12))
         self._lbl(f_q, "Qualidade do vídeo", self.f_small_b).pack(anchor="w",
@@ -485,7 +453,6 @@ class App(tk.Tk):
                           activebackground=C["accent1"], activeforeground="white")
         om.pack(fill="x")
 
-        # Subtitle languages
         f_l = tk.Frame(grid, bg=C["surface"])
         f_l.grid(row=0, column=1, sticky="ew", padx=(7, 0), pady=(0, 12))
         self._lbl(f_l, "Idiomas de legenda", self.f_small_b).pack(anchor="w",
@@ -493,17 +460,14 @@ class App(tk.Tk):
         self.var_langs = tk.StringVar(value="all")
         self._entry(f_l, self.var_langs).pack(fill="x", ipady=6)
 
-        # Switch: automatic subtitles
         self.sw_auto = self._switch_row(
             grid, "Legendas automáticas", "Geradas pelo YouTube")
         self.sw_auto["frame"].grid(row=1, column=0, sticky="ew", padx=(0, 7))
 
-        # Switch: audio only
         self.sw_audio = self._switch_row(
             grid, "Apenas áudio", "Extrai .mka sem vídeo")
         self.sw_audio["frame"].grid(row=1, column=1, sticky="ew", padx=(7, 0))
 
-        # ---- Actions -------------------------------------------------------
         actions = tk.Frame(root, bg=C["bg_page"])
         actions.pack(fill="x", pady=(0, 16))
         self.btn_download = RoundedButton(
@@ -519,7 +483,6 @@ class App(tk.Tk):
                       fill=C["surface2"], fg=C["text"], font=self.f_ui_b,
                       border=C["border"]).pack(side="right")
 
-        # ---- Card: Progress ------------------------------------------------
         c_prog = self._card(root)
         c_prog.pack(fill="x", pady=(0, 16))
         prog = tk.Frame(c_prog, bg=C["surface"])
@@ -553,7 +516,6 @@ class App(tk.Tk):
                                  anchor="w")
         self.lbl_meta.pack(fill="x")
 
-        # ---- Card: Console -------------------------------------------------
         c_con = tk.Frame(root, bg=C["console_bg"], highlightthickness=1,
                          highlightbackground=C["border_soft"], bd=0)
         c_con.pack(fill="both", expand=True)
@@ -602,7 +564,6 @@ class App(tk.Tk):
         sw.pack(side="right")
         return {"frame": f, "switch": sw}
 
-    # -------------------------------------------------------------- helpers
     def _update_link_count(self):
         n = len([u for u in self.txt_urls.get("1.0", "end").splitlines()
                  if u.strip()])
@@ -641,7 +602,7 @@ class App(tk.Tk):
     def _open_folder(self):
         dest = Path(self.var_dest.get())
         dest.mkdir(parents=True, exist_ok=True)
-        os.startfile(dest)  # Windows
+        os.startfile(dest)
 
     def _copy_log(self):
         self.clipboard_clear()
@@ -688,7 +649,6 @@ class App(tk.Tk):
                 fg=C["green"] if self._pulse_on else "#1f3a2e")
         self.after(700, self._pulse)
 
-    # ------------------------------------------------------------ download
     def _start_download(self):
         urls = [u.strip() for u in self.txt_urls.get("1.0", "end").splitlines()
                 if u.strip()]
@@ -743,7 +703,6 @@ class App(tk.Tk):
         self.cancel_event.set()
         self._set_status("Cancelando", C["yellow"], "#3a341f", False)
 
-    # --------------------------------------------------- message loop
     def _process_queue(self):
         try:
             while True:

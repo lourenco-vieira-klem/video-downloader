@@ -3,11 +3,10 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-# Always write to <root>/assets/icon.ico, regardless of the current directory.
 OUTPUT = Path(__file__).resolve().parent.parent / "assets" / "icon.ico"
 
-ACCENT1 = (139, 92, 246)   # #8b5cf6
-ACCENT2 = (236, 72, 153)   # #ec4899
+ACCENT1 = (139, 92, 246)
+ACCENT2 = (236, 72, 153)
 
 
 def _gradient(size):
