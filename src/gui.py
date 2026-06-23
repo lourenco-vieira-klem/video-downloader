@@ -52,7 +52,11 @@ except ImportError:
         "Pillow não instalado. Ative a venv e rode: pip install -r requirements.txt"
     )
 
-from youtube_downloader import garantir_runtime_js, montar_opcoes
+from youtube_downloader import (
+    garantir_runtime_js,
+    montar_opcoes,
+    pasta_downloads_padrao,
+)
 
 
 # --------------------------------------------------------------------- paleta
@@ -469,7 +473,7 @@ class App(tk.Tk):
                                                                 pady=(0, 7))
         dest = tk.Frame(opt, bg=C["surface"])
         dest.pack(fill="x", pady=(0, 14))
-        self.var_destino = tk.StringVar(value=str(Path.cwd() / "downloads"))
+        self.var_destino = tk.StringVar(value=str(pasta_downloads_padrao()))
         e_dest = self._entry(dest, self.var_destino)
         e_dest.pack(side="left", fill="x", expand=True, ipady=6)
         RoundedButton(dest, "Procurar", self._escolher_pasta, icon="🗁",

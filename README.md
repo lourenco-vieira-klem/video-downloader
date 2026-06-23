@@ -123,7 +123,7 @@ python src/youtube_downloader.py URL --audio-only
 
 | Flag | Descrição | Padrão |
 |------|-----------|--------|
-| `-o, --output` | Pasta de destino | `./downloads` |
+| `-o, --output` | Pasta de destino | pasta `Downloads` do usuário |
 | `--langs` | Idiomas de legenda (`pt,en,es` ou `all`) | `all` |
 | `--auto-subs` | Inclui legendas automáticas | desligado |
 | `--audio-only` | Baixa só o áudio (todas as trilhas) | desligado |

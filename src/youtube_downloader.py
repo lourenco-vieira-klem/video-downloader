@@ -30,6 +30,15 @@ except ImportError:
     )
 
 
+def pasta_downloads_padrao() -> Path:
+    """Pasta de downloads padrão do usuário (Windows, Linux e macOS).
+
+    Retorna ~/Downloads, o local convencional em todos os sistemas. É para lá
+    que os vídeos vão por padrão — não para uma subpasta do projeto.
+    """
+    return Path.home() / "Downloads"
+
+
 def checar_ffmpeg() -> None:
     """Garante que o FFmpeg está disponível — é ele que junta áudio/legendas."""
     if shutil.which("ffmpeg") is None:
@@ -167,8 +176,8 @@ def main() -> None:
         epilog=__doc__,
     )
     parser.add_argument("urls", nargs="+", help="Uma ou mais URLs (vídeo ou playlist).")
-    parser.add_argument("-o", "--output", default="downloads",
-                        help="Pasta de destino (padrão: ./downloads).")
+    parser.add_argument("-o", "--output", default=None,
+                        help="Pasta de destino (padrão: a pasta Downloads do usuário).")
     parser.add_argument("--langs", default="all",
                         help="Idiomas de legenda separados por vírgula (ex.: pt,en,es) "
                              "ou 'all' para todos (padrão: all).")
@@ -184,7 +193,8 @@ def main() -> None:
 
     checar_ffmpeg()
 
-    destino = Path(args.output).expanduser().resolve()
+    destino = (Path(args.output).expanduser() if args.output
+               else pasta_downloads_padrao()).resolve()
     destino.mkdir(parents=True, exist_ok=True)
 
     print(f"📂 Destino: {destino}")
