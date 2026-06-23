@@ -148,16 +148,11 @@ O executável é gerado em `dist/`.
 
 ## 🩹 Solução de problemas
 
-**`This video is not available` em todos os vídeos / `No supported JavaScript runtime could be found`**
-Falta o **Deno**. Instale com `winget install DenoLand.Deno` e reabra o programa.
-
-**`This video is not available` em apenas alguns vídeos de uma playlist**
-Esses vídeos estão realmente bloqueados (copyright/região — `playability status: UNPLAYABLE`).
-Nenhum downloader consegue baixá-los; o restante da playlist baixa normalmente.
-
-**`Some formats may be missing` / `n challenge solving failed`**
-O yt-dlp precisa baixar o _challenge solver_ (EJS). O programa já passa
-`remote_components: ["ejs:github"]` automaticamente para resolver isso.
+| Mensagem de erro | Causa e solução |
+|------------------|-----------------|
+| `This video is not available` em **todos** os vídeos, ou `No supported JavaScript runtime could be found` | Falta o **Deno**. Instale com `winget install DenoLand.Deno` e reabra o programa. |
+| `This video is not available` em **apenas alguns** vídeos de uma playlist | Esses vídeos estão realmente bloqueados (copyright/região — `playability status: UNPLAYABLE`). Nenhum downloader consegue baixá-los; o restante da playlist baixa normalmente. |
+| `Some formats may be missing` / `n challenge solving failed` | O yt-dlp precisa baixar o _challenge solver_ (EJS). O app já passa `remote_components: ["ejs:github"]` automaticamente para resolver isso. |
 
 ## 📝 Observações
 
