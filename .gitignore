@@ -1,0 +1,33 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+
+# ---- Ambiente virtual ----
+.venv/
+venv/
+env/
+
+# ---- Build (PyInstaller) ----
+build/
+dist/
+*.manifest
+
+# Binários de terceiros embutidos no .exe (ffmpeg, ffprobe, deno).
+# São grandes e têm licença própria — baixe-os localmente, não versione.
+build_bin/
+
+# ---- Saída do app ----
+downloads/
+
+# ---- Config local do editor/ferramentas ----
+.claude/
+.idea/
+.vscode/
+
+# ---- SO ----
+Thumbs.db
+desktop.ini
+.DS_Store

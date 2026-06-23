@@ -1,0 +1,5 @@
+# Normaliza quebras de linha no repositório (LF), exceto scripts do Windows.
+* text=auto eol=lf
+
+*.bat text eol=crlf
+*.ico binary
