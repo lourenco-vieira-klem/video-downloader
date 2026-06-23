@@ -1,20 +1,4 @@
 #!/usr/bin/env python3
-"""
-GUI (Tkinter) para o YouTube Downloader — layout redesenhado.
-
-Interface gráfica em tema escuro para baixar vídeos e playlists do YouTube
-preservando TODAS as faixas de áudio e legendas num único arquivo .mkv.
-
-O visual reproduz o redesign (cards, switches, badge de contagem, barra de
-progresso com pílula de status e console colorido) dentro das possibilidades
-do Tkinter.
-
-Execute com:
-    python gui.py
-ou, usando a venv:
-    .venv\\Scripts\\python.exe gui.py
-"""
-
 import os
 import queue
 import shutil
@@ -26,17 +10,16 @@ from pathlib import Path
 from tkinter import filedialog, messagebox
 
 
-def _registrar_binarios_embutidos():
-    """Quando rodando como .exe (PyInstaller), os binários embutidos
-    (ffmpeg, ffprobe, deno) são extraídos para uma pasta temporária.
-    Adicionamos essa pasta ao PATH para que o shutil.which e o yt-dlp os
-    encontrem — deixando o executável totalmente autossuficiente."""
+def _register_embedded_binaries():
+    # When running as a frozen .exe (PyInstaller), the embedded binaries
+    # (ffmpeg, ffprobe, deno) are extracted to a temp folder. Add it to PATH so
+    # shutil.which and yt-dlp find them, making the executable self-contained.
     if getattr(sys, "frozen", False):
         base = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
         os.environ["PATH"] = base + os.pathsep + os.environ.get("PATH", "")
 
 
-_registrar_binarios_embutidos()
+_register_embedded_binaries()
 
 try:
     import yt_dlp
@@ -53,14 +36,14 @@ except ImportError:
     )
 
 from youtube_downloader import (
-    garantir_runtime_js,
-    montar_opcoes,
-    pasta_downloads_padrao,
+    build_options,
+    default_downloads_dir,
+    ensure_js_runtime,
 )
 
 
-# --------------------------------------------------------------------- paleta
-# Aproximações em hex das cores OKLCH do redesign (tema escuro roxo/rosa).
+# --------------------------------------------------------------------- palette
+# Hex approximations of the redesign's OKLCH colors (dark purple/pink theme).
 C = {
     "bg_page":      "#141318",
     "bg_window":    "#1d1c24",
@@ -80,8 +63,8 @@ C = {
     "accent2":      "#ec4899",
 }
 
-# Mapeia o rótulo amigável da qualidade para o seletor do yt-dlp.
-QUALIDADES = {
+# Maps a friendly quality label to the yt-dlp selector.
+QUALITIES = {
     "Melhor disponível (bv*)": "bv*",
     "2160p (4K)":              "bv*[height<=2160]",
     "1080p":                   "bv*[height<=1080]",
@@ -90,7 +73,7 @@ QUALIDADES = {
 }
 
 
-# ----------------------------------------------------------------- utilidades
+# ----------------------------------------------------------------- utilities
 def _hex_to_rgb(h: str):
     h = h.lstrip("#")
     return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
@@ -106,15 +89,15 @@ def _lerp(c1: str, c2: str, t: float) -> str:
 
 
 def _brighten(h: str, f: float) -> str:
-    """f>0 clareia, f<0 escurece."""
+    # f>0 lightens, f<0 darkens.
     return _lerp(h, "#ffffff" if f >= 0 else "#000000", abs(f))
 
 
-_SS = 4  # fator de supersampling para anti-aliasing dos cantos
+_SS = 4  # supersampling factor for corner anti-aliasing
 
 
 def _gradient_image(w: int, h: int, c1: str, c2: str) -> "Image.Image":
-    """Gera um gradiente horizontal c1→c2 como imagem RGB."""
+    # Horizontal c1->c2 gradient as an RGB image.
     a, b = _hex_to_rgb(c1), _hex_to_rgb(c2)
     if c1 == c2:
         return Image.new("RGB", (w, h), a)
@@ -127,7 +110,7 @@ def _gradient_image(w: int, h: int, c1: str, c2: str) -> "Image.Image":
 
 
 def _round_rect_photo(w, h, r, c1, c2, border=None):
-    """Retângulo arredondado com gradiente e bordas suavizadas (anti-aliased)."""
+    # Rounded rectangle with gradient and anti-aliased edges.
     ss = _SS
     W, H, R = w * ss, h * ss, int(r * ss)
     grad = _gradient_image(W, H, c1, c2).convert("RGBA")
@@ -141,9 +124,9 @@ def _round_rect_photo(w, h, r, c1, c2, border=None):
     return ImageTk.PhotoImage(grad.resize((w, h), Image.LANCZOS))
 
 
-# ----------------------------------------------------------------- componentes
+# ----------------------------------------------------------------- components
 class RoundedButton(tk.Canvas):
-    """Botão arredondado com cantos suavizados (renderizado via Pillow)."""
+    # Rounded button with anti-aliased corners (rendered via Pillow).
 
     def __init__(self, master, text, command, *, colors=None, fill=None,
                  fg="white", font=None, icon=None, height=40, pad_x=20,
@@ -230,7 +213,7 @@ class RoundedButton(tk.Canvas):
 
 
 class ToggleSwitch(tk.Canvas):
-    """Interruptor estilo iOS com cantos e knob suavizados (Pillow)."""
+    # iOS-style switch with anti-aliased corners and knob (Pillow).
 
     W, H = 44, 24
 
@@ -284,7 +267,7 @@ class ToggleSwitch(tk.Canvas):
 
 
 class GradientBar(tk.Canvas):
-    """Barra de progresso arredondada e suavizada com gradiente."""
+    # Rounded, anti-aliased gradient progress bar.
 
     def __init__(self, master, height=10):
         super().__init__(master, height=height, bg=master["bg"],
@@ -323,7 +306,7 @@ class GradientBar(tk.Canvas):
 
 
 class AppMark(tk.Canvas):
-    """Logo: quadrado arredondado com gradiente e seta de download (Pillow)."""
+    # Logo: rounded square with gradient and a download arrow (Pillow).
 
     def __init__(self, master, size=46):
         super().__init__(master, width=size, height=size, bg=master["bg"],
@@ -348,26 +331,26 @@ class AppMark(tk.Canvas):
         self.create_image(0, 0, anchor="nw", image=self._photo)
 
 
-# ------------------------------------------------------------------ infra log
-class LoggerGUI:
-    """Logger do yt-dlp que envia mensagens para a fila da GUI."""
+# ------------------------------------------------------------------ logging
+class GuiLogger:
+    # yt-dlp logger that forwards messages to the GUI queue.
 
-    def __init__(self, fila: queue.Queue):
-        self.fila = fila
+    def __init__(self, msg_queue: queue.Queue):
+        self.msg_queue = msg_queue
 
     def debug(self, msg):
         if msg.startswith("[debug]"):
             return
-        self.fila.put(("log", msg))
+        self.msg_queue.put(("log", msg))
 
     def info(self, msg):
-        self.fila.put(("log", msg))
+        self.msg_queue.put(("log", msg))
 
     def warning(self, msg):
-        self.fila.put(("log", "⚠  " + msg))
+        self.msg_queue.put(("log", "⚠  " + msg))
 
     def error(self, msg):
-        self.fila.put(("log", "✕ ERROR " + msg))
+        self.msg_queue.put(("log", "✕ ERROR " + msg))
 
 
 # --------------------------------------------------------------------- App
@@ -379,21 +362,21 @@ class App(tk.Tk):
         self.minsize(680, 760)
         self.configure(bg=C["bg_page"])
 
-        self.fila: queue.Queue = queue.Queue()
-        self.thread_download: threading.Thread | None = None
-        self.cancelar = threading.Event()
+        self.msg_queue: queue.Queue = queue.Queue()
+        self.download_thread: threading.Thread | None = None
+        self.cancel_event = threading.Event()
         self._downloading = False
         self._pulse_on = True
 
         self._init_fonts()
-        self._montar_widgets()
-        self._verificar_ffmpeg()
-        self._verificar_runtime_js()
+        self._build_widgets()
+        self._check_ffmpeg()
+        self._check_js_runtime()
         self._update_link_count()
-        self.after(100, self._processar_fila)
+        self.after(100, self._process_queue)
         self._pulse()
 
-    # ----------------------------------------------------------------- fontes
+    # ----------------------------------------------------------------- fonts
     def _init_fonts(self):
         self.f_ui = tkfont.Font(family="Segoe UI", size=10)
         self.f_ui_b = tkfont.Font(family="Segoe UI", size=10, weight="bold")
@@ -420,7 +403,7 @@ class App(tk.Tk):
                         fg=fg or C["text"], font=font or self.f_ui)
 
     # ----------------------------------------------------------------- layout
-    def _montar_widgets(self):
+    def _build_widgets(self):
         root = tk.Frame(self, bg=C["bg_page"])
         root.pack(fill="both", expand=True, padx=26, pady=24)
 
@@ -462,38 +445,38 @@ class App(tk.Tk):
                   "automaticamente", self.f_small, C["text_dim"]).pack(
                       anchor="w", pady=(9, 0))
 
-        # ---- Card: Opções --------------------------------------------------
+        # ---- Card: Options -------------------------------------------------
         c_opt = self._card(root)
         c_opt.pack(fill="x", pady=(0, 16))
         opt = tk.Frame(c_opt, bg=C["surface"])
         opt.pack(fill="x", padx=20, pady=18)
 
-        # Pasta de destino
+        # Destination folder
         self._lbl(opt, "Pasta de destino", self.f_small_b).pack(anchor="w",
                                                                 pady=(0, 7))
         dest = tk.Frame(opt, bg=C["surface"])
         dest.pack(fill="x", pady=(0, 14))
-        self.var_destino = tk.StringVar(value=str(pasta_downloads_padrao()))
-        e_dest = self._entry(dest, self.var_destino)
+        self.var_dest = tk.StringVar(value=str(default_downloads_dir()))
+        e_dest = self._entry(dest, self.var_dest)
         e_dest.pack(side="left", fill="x", expand=True, ipady=6)
-        RoundedButton(dest, "Procurar", self._escolher_pasta, icon="🗁",
+        RoundedButton(dest, "Procurar", self._choose_folder, icon="🗁",
                       fill=C["surface2"], fg=C["text_mut"], font=self.f_ui,
                       height=34, pad_x=14, border=C["border"]).pack(
                           side="left", padx=(8, 0))
 
-        # Grid 2 colunas
+        # 2-column grid
         grid = tk.Frame(opt, bg=C["surface"])
         grid.pack(fill="x")
         grid.columnconfigure(0, weight=1, uniform="g")
         grid.columnconfigure(1, weight=1, uniform="g")
 
-        # Qualidade
+        # Quality
         f_q = tk.Frame(grid, bg=C["surface"])
         f_q.grid(row=0, column=0, sticky="ew", padx=(0, 7), pady=(0, 12))
         self._lbl(f_q, "Qualidade do vídeo", self.f_small_b).pack(anchor="w",
                                                                   pady=(0, 7))
         self.var_quality = tk.StringVar(value="Melhor disponível (bv*)")
-        om = tk.OptionMenu(f_q, self.var_quality, *QUALIDADES.keys())
+        om = tk.OptionMenu(f_q, self.var_quality, *QUALITIES.keys())
         om.config(bg=C["surface2"], fg=C["text"], activebackground=C["surface"],
                   activeforeground=C["text"], font=self.f_ui, relief="flat",
                   bd=0, highlightthickness=1, highlightbackground=C["border"],
@@ -502,7 +485,7 @@ class App(tk.Tk):
                           activebackground=C["accent1"], activeforeground="white")
         om.pack(fill="x")
 
-        # Idiomas de legenda
+        # Subtitle languages
         f_l = tk.Frame(grid, bg=C["surface"])
         f_l.grid(row=0, column=1, sticky="ew", padx=(7, 0), pady=(0, 12))
         self._lbl(f_l, "Idiomas de legenda", self.f_small_b).pack(anchor="w",
@@ -510,33 +493,33 @@ class App(tk.Tk):
         self.var_langs = tk.StringVar(value="all")
         self._entry(f_l, self.var_langs).pack(fill="x", ipady=6)
 
-        # Switch: legendas automáticas
+        # Switch: automatic subtitles
         self.sw_auto = self._switch_row(
             grid, "Legendas automáticas", "Geradas pelo YouTube")
         self.sw_auto["frame"].grid(row=1, column=0, sticky="ew", padx=(0, 7))
 
-        # Switch: apenas áudio
+        # Switch: audio only
         self.sw_audio = self._switch_row(
             grid, "Apenas áudio", "Extrai .mka sem vídeo")
         self.sw_audio["frame"].grid(row=1, column=1, sticky="ew", padx=(7, 0))
 
-        # ---- Ações ---------------------------------------------------------
+        # ---- Actions -------------------------------------------------------
         actions = tk.Frame(root, bg=C["bg_page"])
         actions.pack(fill="x", pady=(0, 16))
-        self.btn_baixar = RoundedButton(
-            actions, "Baixar", self._iniciar_download, icon="⭳",
+        self.btn_download = RoundedButton(
+            actions, "Baixar", self._start_download, icon="⭳",
             colors=(C["accent1"], C["accent2"]), font=self.f_ui_b, pad_x=24)
-        self.btn_baixar.pack(side="left")
-        self.btn_cancelar = RoundedButton(
-            actions, "Cancelar", self._cancelar, icon="✕", fill=C["surface2"],
+        self.btn_download.pack(side="left")
+        self.btn_cancel = RoundedButton(
+            actions, "Cancelar", self._cancel, icon="✕", fill=C["surface2"],
             fg=C["text"], font=self.f_ui_b, border=C["border"])
-        self.btn_cancelar.pack(side="left", padx=10)
-        self.btn_cancelar.set_enabled(False)
-        RoundedButton(actions, "Abrir pasta", self._abrir_pasta, icon="🗁",
+        self.btn_cancel.pack(side="left", padx=10)
+        self.btn_cancel.set_enabled(False)
+        RoundedButton(actions, "Abrir pasta", self._open_folder, icon="🗁",
                       fill=C["surface2"], fg=C["text"], font=self.f_ui_b,
                       border=C["border"]).pack(side="right")
 
-        # ---- Card: Progresso ----------------------------------------------
+        # ---- Card: Progress ------------------------------------------------
         c_prog = self._card(root)
         c_prog.pack(fill="x", pady=(0, 16))
         prog = tk.Frame(c_prog, bg=C["surface"])
@@ -579,11 +562,11 @@ class App(tk.Tk):
         chead.pack(fill="x")
         tk.Label(chead, text="●  Registro", bg="#191820", fg=C["text_mut"],
                  font=self.f_small_b).pack(side="left", padx=15, pady=10)
-        RoundedButton(chead, "Limpar", self._limpar_log, fill="#191820",
+        RoundedButton(chead, "Limpar", self._clear_log, fill="#191820",
                       fg=C["text_dim"], font=self.f_small, height=26, pad_x=10,
                       border=C["border_soft"]).pack(side="right", padx=(0, 12),
                                                     pady=7)
-        RoundedButton(chead, "Copiar", self._copiar_log, fill="#191820",
+        RoundedButton(chead, "Copiar", self._copy_log, fill="#191820",
                       fg=C["text_dim"], font=self.f_small, height=26, pad_x=10,
                       border=C["border_soft"]).pack(side="right", padx=4, pady=7)
 
@@ -625,7 +608,7 @@ class App(tk.Tk):
                  if u.strip()])
         self.lbl_badge.config(text=f"{n} link" + ("s" if n != 1 else ""))
 
-    def _verificar_ffmpeg(self):
+    def _check_ffmpeg(self):
         if shutil.which("ffmpeg") is None:
             self._log("⚠  FFmpeg não encontrado no PATH. Ele é obrigatório "
                       "para juntar áudios e legendas.", "yellow")
@@ -635,8 +618,8 @@ class App(tk.Tk):
                 "Instale com:  winget install Gyan.FFmpeg\n"
                 "Sem ele não é possível embutir múltiplas faixas.")
 
-    def _verificar_runtime_js(self):
-        if garantir_runtime_js():
+    def _check_js_runtime(self):
+        if ensure_js_runtime():
             self._log("✓ Runtime JS (Deno) detectado — extração do YouTube OK.",
                       "green")
         else:
@@ -650,26 +633,26 @@ class App(tk.Tk):
                 "Instale com:  winget install DenoLand.Deno\n"
                 "e reabra este programa.")
 
-    def _escolher_pasta(self):
-        pasta = filedialog.askdirectory(initialdir=self.var_destino.get())
-        if pasta:
-            self.var_destino.set(pasta)
+    def _choose_folder(self):
+        folder = filedialog.askdirectory(initialdir=self.var_dest.get())
+        if folder:
+            self.var_dest.set(folder)
 
-    def _abrir_pasta(self):
-        destino = Path(self.var_destino.get())
-        destino.mkdir(parents=True, exist_ok=True)
-        os.startfile(destino)  # Windows
+    def _open_folder(self):
+        dest = Path(self.var_dest.get())
+        dest.mkdir(parents=True, exist_ok=True)
+        os.startfile(dest)  # Windows
 
-    def _copiar_log(self):
+    def _copy_log(self):
         self.clipboard_clear()
         self.clipboard_append(self.txt_log.get("1.0", "end"))
 
-    def _limpar_log(self):
+    def _clear_log(self):
         self.txt_log["state"] = "normal"
         self.txt_log.delete("1.0", "end")
         self.txt_log["state"] = "disabled"
 
-    def _classificar(self, msg: str) -> str:
+    def _classify(self, msg: str) -> str:
         m = msg.strip()
         low = m.lower()
         if m.startswith("✕") or "error" in low and "✓" not in m:
@@ -688,14 +671,14 @@ class App(tk.Tk):
 
     def _log(self, msg: str, tag: str | None = None):
         self.txt_log["state"] = "normal"
-        self.txt_log.insert("end", msg + "\n", tag or self._classificar(msg))
+        self.txt_log.insert("end", msg + "\n", tag or self._classify(msg))
         self.txt_log.see("end")
         self.txt_log["state"] = "disabled"
 
-    def _set_status(self, texto: str, cor: str, bg: str, downloading: bool):
+    def _set_status(self, text: str, color: str, bg: str, downloading: bool):
         self._downloading = downloading
-        self.lbl_status_pill.config(text=texto, fg=_brighten(cor, 0.2), bg=bg)
-        self.dot_pulse.config(fg=cor, bg=bg)
+        self.lbl_status_pill.config(text=text, fg=_brighten(color, 0.2), bg=bg)
+        self.dot_pulse.config(fg=color, bg=bg)
         self.lbl_status_pill.master.config(bg=bg)
 
     def _pulse(self):
@@ -706,93 +689,93 @@ class App(tk.Tk):
         self.after(700, self._pulse)
 
     # ------------------------------------------------------------ download
-    def _iniciar_download(self):
+    def _start_download(self):
         urls = [u.strip() for u in self.txt_urls.get("1.0", "end").splitlines()
                 if u.strip()]
         if not urls:
             messagebox.showerror("Sem URL", "Informe ao menos uma URL.")
             return
 
-        destino = Path(self.var_destino.get()).expanduser()
-        destino.mkdir(parents=True, exist_ok=True)
+        dest = Path(self.var_dest.get()).expanduser()
+        dest.mkdir(parents=True, exist_ok=True)
 
-        opcoes = montar_opcoes(
-            destino=destino,
+        options = build_options(
+            dest=dest,
             langs=self.var_langs.get(),
             auto_subs=self.sw_auto["switch"].get(),
-            apenas_audio=self.sw_audio["switch"].get(),
-            qualidade=QUALIDADES.get(self.var_quality.get(), "bv*"),
+            audio_only=self.sw_audio["switch"].get(),
+            quality=QUALITIES.get(self.var_quality.get(), "bv*"),
         )
-        opcoes["logger"] = LoggerGUI(self.fila)
-        opcoes["progress_hooks"] = [self._hook_progresso]
-        opcoes["quiet"] = True
-        opcoes["no_warnings"] = False
+        options["logger"] = GuiLogger(self.msg_queue)
+        options["progress_hooks"] = [self._progress_hook]
+        options["quiet"] = True
+        options["no_warnings"] = False
 
-        self.cancelar.clear()
-        self.btn_baixar.set_enabled(False)
-        self.btn_cancelar.set_enabled(True)
+        self.cancel_event.clear()
+        self.btn_download.set_enabled(False)
+        self.btn_cancel.set_enabled(True)
         self.bar.set(0)
         self.lbl_pct.config(text="0%")
         self._set_status("Baixando", C["green"], "#1f3a2e", True)
         self.lbl_prog_title.config(text="Preparando…")
         self._log(f"▶ Iniciando {len(urls)} download(s)…", "cyan")
 
-        self.thread_download = threading.Thread(
-            target=self._worker, args=(urls, opcoes), daemon=True)
-        self.thread_download.start()
+        self.download_thread = threading.Thread(
+            target=self._worker, args=(urls, options), daemon=True)
+        self.download_thread.start()
 
-    def _worker(self, urls, opcoes):
+    def _worker(self, urls, options):
         try:
-            with yt_dlp.YoutubeDL(opcoes) as ydl:
+            with yt_dlp.YoutubeDL(options) as ydl:
                 ydl.download(urls)
-            self.fila.put(("done", "✅ Concluído!"))
+            self.msg_queue.put(("done", "✅ Concluído!"))
         except yt_dlp.utils.DownloadCancelled:
-            self.fila.put(("done", "✖ Cancelado pelo usuário."))
+            self.msg_queue.put(("done", "✖ Cancelado pelo usuário."))
         except Exception as e:  # noqa: BLE001
-            self.fila.put(("done", f"❌ Erro: {e}"))
+            self.msg_queue.put(("done", f"❌ Erro: {e}"))
 
-    def _hook_progresso(self, d):
-        if self.cancelar.is_set():
+    def _progress_hook(self, d):
+        if self.cancel_event.is_set():
             raise yt_dlp.utils.DownloadCancelled()
-        self.fila.put(("progress", d))
+        self.msg_queue.put(("progress", d))
 
-    def _cancelar(self):
-        self.cancelar.set()
+    def _cancel(self):
+        self.cancel_event.set()
         self._set_status("Cancelando", C["yellow"], "#3a341f", False)
 
-    # --------------------------------------------------- loop de mensagens
-    def _processar_fila(self):
+    # --------------------------------------------------- message loop
+    def _process_queue(self):
         try:
             while True:
-                tipo, dado = self.fila.get_nowait()
-                if tipo == "log":
-                    self._log(dado)
-                elif tipo == "progress":
-                    self._atualizar_progresso(dado)
-                elif tipo == "done":
-                    self._finalizar(dado)
+                kind, data = self.msg_queue.get_nowait()
+                if kind == "log":
+                    self._log(data)
+                elif kind == "progress":
+                    self._update_progress(data)
+                elif kind == "done":
+                    self._finish(data)
         except queue.Empty:
             pass
-        self.after(100, self._processar_fila)
+        self.after(100, self._process_queue)
 
-    def _atualizar_progresso(self, d):
+    def _update_progress(self, d):
         status = d.get("status")
         if status == "downloading":
             total = d.get("total_bytes") or d.get("total_bytes_estimate")
-            baixado = d.get("downloaded_bytes", 0)
+            downloaded = d.get("downloaded_bytes", 0)
             if total:
-                pct = baixado / total * 100
+                pct = downloaded / total * 100
                 self.bar.set(pct)
                 self.lbl_pct.config(text=f"{pct:.0f}%")
-            nome = Path(d.get("filename", "")).name
-            self.lbl_prog_title.config(text=nome or "Baixando…")
-            vel = d.get("_speed_str", "").strip()
+            name = Path(d.get("filename", "")).name
+            self.lbl_prog_title.config(text=name or "Baixando…")
+            speed = d.get("_speed_str", "").strip()
             eta = d.get("_eta_str", "").strip()
-            tam = ""
+            size = ""
             if total:
-                tam = f"{baixado / 1048576:.0f} / {total / 1048576:.0f} MB"
-            partes = [p for p in (vel, f"faltam {eta}" if eta else "", tam) if p]
-            self.lbl_meta.config(text="    ·    ".join(partes) or "—")
+                size = f"{downloaded / 1048576:.0f} / {total / 1048576:.0f} MB"
+            parts = [p for p in (speed, f"faltam {eta}" if eta else "", size) if p]
+            self.lbl_meta.config(text="    ·    ".join(parts) or "—")
         elif status == "finished":
             self.bar.set(100)
             self.lbl_pct.config(text="100%")
@@ -800,12 +783,12 @@ class App(tk.Tk):
             self.lbl_prog_title.config(text="Juntando faixas (FFmpeg)…")
             self._log(f"✓ Baixado: {Path(d.get('filename', '')).name}", "green")
 
-    def _finalizar(self, msg):
-        sucesso = msg.startswith("✅")
-        self._log(msg, "green" if sucesso else "red")
-        self.btn_baixar.set_enabled(True)
-        self.btn_cancelar.set_enabled(False)
-        if sucesso:
+    def _finish(self, msg):
+        success = msg.startswith("✅")
+        self._log(msg, "green" if success else "red")
+        self.btn_download.set_enabled(True)
+        self.btn_cancel.set_enabled(False)
+        if success:
             self.bar.set(100)
             self.lbl_pct.config(text="100%")
             self._set_status("Concluído", C["green"], "#1f3a2e", False)

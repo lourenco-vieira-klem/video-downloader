@@ -1,20 +1,4 @@
 #!/usr/bin/env python3
-"""
-YouTube Downloader — baixa vídeos e playlists do YouTube preservando
-TODAS as faixas de áudio (idiomas) e TODAS as legendas em um único arquivo .mkv.
-
-Requisitos:
-    - Python 3.8+
-    - yt-dlp   (pip install -r requirements.txt)
-    - FFmpeg   (precisa estar instalado e no PATH do sistema)
-
-Uso:
-    python youtube_downloader.py "https://www.youtube.com/watch?v=..."
-    python youtube_downloader.py "https://www.youtube.com/playlist?list=..." -o "D:/Videos"
-    python youtube_downloader.py URL --langs pt,en,es        # só esses idiomas
-    python youtube_downloader.py URL --auto-subs             # inclui legendas automáticas
-"""
-
 import argparse
 import os
 import shutil
@@ -30,17 +14,12 @@ except ImportError:
     )
 
 
-def pasta_downloads_padrao() -> Path:
-    """Pasta de downloads padrão do usuário (Windows, Linux e macOS).
-
-    Retorna ~/Downloads, o local convencional em todos os sistemas. É para lá
-    que os vídeos vão por padrão — não para uma subpasta do projeto.
-    """
+def default_downloads_dir() -> Path:
+    # User's conventional Downloads folder on Windows, Linux and macOS.
     return Path.home() / "Downloads"
 
 
-def checar_ffmpeg() -> None:
-    """Garante que o FFmpeg está disponível — é ele que junta áudio/legendas."""
+def check_ffmpeg() -> None:
     if shutil.which("ffmpeg") is None:
         sys.exit(
             "Erro: FFmpeg não foi encontrado no PATH.\n"
@@ -52,94 +31,81 @@ def checar_ffmpeg() -> None:
         )
 
 
-def garantir_runtime_js() -> bool:
-    """
-    O YouTube exige um runtime JS (Deno) para extrair os formatos.
-    Sem ele, o yt-dlp falha com 'This video is not available'.
-
-    Procura o 'deno' no PATH e, se não achar, tenta localizá-lo nos
-    diretórios padrão do winget e o adiciona ao PATH desta sessão —
-    assim não é preciso reiniciar o terminal/PC após instalar.
-    Retorna True se um runtime foi encontrado.
-    """
+def ensure_js_runtime() -> bool:
+    # YouTube requires a JS runtime (Deno) to extract formats; without it yt-dlp
+    # fails with "This video is not available". Look it up in PATH and, if
+    # missing, in the default winget install dirs, adding it to this session's
+    # PATH so no terminal restart is needed. Returns True if a runtime is found.
     if shutil.which("deno") or shutil.which("node") or shutil.which("bun"):
         return True
 
-    # Locais comuns de instalação do Deno no Windows (winget / instalador oficial).
-    candidatos = [
+    candidates = [
         Path(os.environ.get("LOCALAPPDATA", "")) / "Microsoft" / "WinGet" / "Links",
         Path(os.environ.get("USERPROFILE", "")) / ".deno" / "bin",
     ]
-    # Pacote específico do winget (caminho com hash).
+    # Winget package dir (hashed path).
     pkgs = Path(os.environ.get("LOCALAPPDATA", "")) / "Microsoft" / "WinGet" / "Packages"
     if pkgs.is_dir():
-        candidatos += list(pkgs.glob("DenoLand.Deno_*"))
+        candidates += list(pkgs.glob("DenoLand.Deno_*"))
 
-    for diretorio in candidatos:
-        if diretorio and (diretorio / "deno.exe").exists():
-            os.environ["PATH"] = str(diretorio) + os.pathsep + os.environ.get("PATH", "")
+    for directory in candidates:
+        if directory and (directory / "deno.exe").exists():
+            os.environ["PATH"] = str(directory) + os.pathsep + os.environ.get("PATH", "")
             return True
     return False
 
 
-def montar_opcoes(destino: Path, langs: str, auto_subs: bool,
-                  apenas_audio: bool, qualidade: str) -> dict:
-    """Monta o dicionário de opções do yt-dlp."""
+def build_options(dest: Path, langs: str, auto_subs: bool,
+                  audio_only: bool, quality: str) -> dict:
+    ensure_js_runtime()
 
-    garantir_runtime_js()
-
-    # Lista de idiomas de legenda: 'all' por padrão, ou os escolhidos pelo usuário.
     sub_langs = ["all"] if langs.strip().lower() == "all" else \
         [s.strip() for s in langs.split(",") if s.strip()]
 
-    # Seletor de áudio: queremos UMA faixa por idioma (a melhor), e não todas
-    # as variantes de codec/bitrate do mesmo idioma. Vídeos com dublagem
-    # multilíngue expõem cada idioma em ~4 formatos (opus em 3 bitrates + aac);
-    # 'mergeall' puro pegaria tudo (dezenas de faixas redundantes) e o merge
-    # final ficava pesado/falhava.
-    #
-    # Estratégia (cada item é uma tentativa; '/' = fallback se a anterior falhar):
-    #   1) melhor opus por idioma (abr>100 = faixa "high"), excluindo cópias DRC;
-    #   2) se não houver opus, qualquer áudio sem DRC (1 por idioma na prática);
-    #   3) por fim, o melhor áudio único.
-    melhores_audios = [
+    # Audio selector: pick ONE track per language (the best), not every
+    # codec/bitrate variant. Multi-dub videos expose each language in ~4 formats
+    # (opus at 3 bitrates + aac); plain 'mergeall' would grab them all (dozens
+    # of redundant tracks) and make the final merge heavy/fail. Each item is an
+    # attempt ('/' = fallback): 1) best opus per language (abr>100), no DRC
+    # copies; 2) any non-DRC audio; 3) finally the single best audio.
+    audio_selectors = [
         "mergeall[vcodec=none][acodec^=opus][abr>100][format_id!*=drc]",
         "mergeall[vcodec=none][format_id!*=drc]",
         "bestaudio",
     ]
 
-    if apenas_audio:
-        formato = "/".join(melhores_audios)
+    if audio_only:
+        fmt = "/".join(audio_selectors)
     else:
-        # Junta o vídeo escolhido com cada tentativa de áudio, em cascata.
-        formato = "/".join(f"{qualidade}+{a}" for a in melhores_audios) + "/best"
+        # Pair the chosen video with each audio attempt, cascading.
+        fmt = "/".join(f"{quality}+{a}" for a in audio_selectors) + "/best"
 
-    opcoes = {
-        # ---- Extração do YouTube ----
-        # Baixa o "challenge solver" (EJS) necessário, junto com o runtime JS
-        # (Deno), para resolver as assinaturas e não perder formatos.
+    options = {
+        # ---- YouTube extraction ----
+        # Fetch the required "challenge solver" (EJS) along with the JS runtime
+        # (Deno) to solve signatures and not lose formats.
         "remote_components": ["ejs:github"],
 
-        # ---- Seleção de formato ----
-        "format": formato,
-        "allow_multiple_audio_streams": True,   # permite >1 faixa de áudio
+        # ---- Format selection ----
+        "format": fmt,
+        "allow_multiple_audio_streams": True,   # allow >1 audio track
         "allow_multiple_video_streams": False,
-        "merge_output_format": "mkv",           # MKV suporta N áudios + N legendas
+        "merge_output_format": "mkv",           # MKV holds N audios + N subtitles
 
-        # ---- Legendas ----
-        "writesubtitles": True,                 # baixa legendas "oficiais"
-        "writeautomaticsub": auto_subs,         # legendas geradas automaticamente
+        # ---- Subtitles ----
+        "writesubtitles": True,                 # download "official" subtitles
+        "writeautomaticsub": auto_subs,         # auto-generated subtitles
         "subtitleslangs": sub_langs,
 
-        # ---- Saída / organização ----
+        # ---- Output / organization ----
         "outtmpl": {
-            "default": str(destino / "%(playlist_title,Vídeos)s/%(title)s [%(id)s].%(ext)s"),
+            "default": str(dest / "%(playlist_title,Vídeos)s/%(title)s [%(id)s].%(ext)s"),
         },
-        "ignoreerrors": True,                    # não para a playlist por causa de 1 vídeo
-        "continuedl": True,                      # retoma downloads interrompidos
+        "ignoreerrors": True,                    # one bad video won't stop the playlist
+        "continuedl": True,                      # resume interrupted downloads
         "writethumbnail": True,
 
-        # ---- Pós-processamento (mux final) ----
+        # ---- Post-processing (final mux) ----
         "postprocessors": [
             {"key": "FFmpegEmbedSubtitle", "already_have_subtitle": False},
             {"key": "FFmpegMetadata", "add_metadata": True, "add_chapters": True},
@@ -151,20 +117,19 @@ def montar_opcoes(destino: Path, langs: str, auto_subs: bool,
         "no_warnings": False,
     }
 
-    if apenas_audio:
-        # Para somente-áudio, MKA é o container apropriado para várias trilhas.
-        opcoes["merge_output_format"] = "mka"
-        opcoes["postprocessors"] = [
+    if audio_only:
+        # Audio-only: MKA is the right container for multiple tracks.
+        options["merge_output_format"] = "mka"
+        options["postprocessors"] = [
             {"key": "FFmpegMetadata", "add_metadata": True, "add_chapters": True},
         ]
-        opcoes["writethumbnail"] = False
+        options["writethumbnail"] = False
 
-    return opcoes
+    return options
 
 
-def baixar(urls: list[str], opcoes: dict) -> int:
-    """Executa o download. Retorna o código de saída do yt-dlp."""
-    with yt_dlp.YoutubeDL(opcoes) as ydl:
+def download(urls: list[str], options: dict) -> int:
+    with yt_dlp.YoutubeDL(options) as ydl:
         return ydl.download(urls)
 
 
@@ -173,7 +138,6 @@ def main() -> None:
         description="Baixa vídeos/playlists do YouTube com TODAS as faixas de "
                     "áudio e legendas em um único arquivo .mkv.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=__doc__,
     )
     parser.add_argument("urls", nargs="+", help="Uma ou mais URLs (vídeo ou playlist).")
     parser.add_argument("-o", "--output", default=None,
@@ -191,33 +155,33 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    checar_ffmpeg()
+    check_ffmpeg()
 
-    destino = (Path(args.output).expanduser() if args.output
-               else pasta_downloads_padrao()).resolve()
-    destino.mkdir(parents=True, exist_ok=True)
+    dest = (Path(args.output).expanduser() if args.output
+            else default_downloads_dir()).resolve()
+    dest.mkdir(parents=True, exist_ok=True)
 
-    print(f"📂 Destino: {destino}")
+    print(f"📂 Destino: {dest}")
     print(f"🎬 URLs: {len(args.urls)}")
     print(f"🗣️  Legendas: {args.langs}"
           f"{' (+ automáticas)' if args.auto_subs else ''}")
     print(f"🎧 Modo: {'somente áudio' if args.audio_only else 'vídeo + áudios + legendas'}\n")
 
-    opcoes = montar_opcoes(
-        destino=destino,
+    options = build_options(
+        dest=dest,
         langs=args.langs,
         auto_subs=args.auto_subs,
-        apenas_audio=args.audio_only,
-        qualidade=args.quality,
+        audio_only=args.audio_only,
+        quality=args.quality,
     )
 
-    codigo = baixar(args.urls, opcoes)
+    code = download(args.urls, options)
 
-    if codigo == 0:
+    if code == 0:
         print("\n✅ Concluído com sucesso!")
     else:
         print("\n⚠️  Finalizado com alguns erros (verifique os logs acima).")
-    sys.exit(codigo)
+    sys.exit(code)
 
 
 if __name__ == "__main__":
